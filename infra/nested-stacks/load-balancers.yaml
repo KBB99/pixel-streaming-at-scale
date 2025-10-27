@@ -1,0 +1,452 @@
+AWSTemplateFormatVersion: "2010-09-09"
+Description: "Load balancers, target groups, and routing rules for Pixel Streaming"
+
+Parameters:
+  StackName:
+    Description: Name of the parent stack for resource naming
+    Type: String
+    Default: "pixel-streaming-at-scale"
+
+Resources:
+  # Matchmaker ALB
+  MatchMakerServerALB:
+    Type: AWS::ElasticLoadBalancingV2::LoadBalancer
+    Properties: 
+      Name: !Sub "ps-scale-MatchMaker-ALB"
+      Scheme: "internet-facing"
+      SecurityGroups: 
+        - Fn::ImportValue: !Sub "${StackName}-MatchmakerALBSGId"
+      Subnets: 
+        - Fn::ImportValue: !Sub "${StackName}-PublicSubnet0Id"
+        - Fn::ImportValue: !Sub "${StackName}-PublicSubnet1Id"
+      Type: "application"
+    
+  MatchMakerTG:
+    Type: AWS::ElasticLoadBalancingV2::TargetGroup
+    Properties: 
+      Name: !Sub "ps-scale-MatchMaker-TG"
+      Port: 90
+      Protocol: "HTTP"
+      TargetType: 'instance'
+      VpcId:
+        Fn::ImportValue: !Sub "${StackName}-VPCId"
+    
+  MatchMakerALBListener:
+    Type: AWS::ElasticLoadBalancingV2::Listener
+    Properties:
+      DefaultActions: 
+        - TargetGroupArn: !Ref MatchMakerTG
+          Type: "forward"
+      LoadBalancerArn: !Ref MatchMakerServerALB
+      Port: 90
+      Protocol: "HTTP"
+
+  # Frontend ALB
+  FrontEndServerALB:
+    Type: AWS::ElasticLoadBalancingV2::LoadBalancer
+    Properties: 
+      Name: !Sub "ps-scale-Frontend-ALB"
+      Scheme: "internet-facing"
+      SecurityGroups: 
+        - Fn::ImportValue: !Sub "${StackName}-FrontendALBSGId"
+      Subnets: 
+        - Fn::ImportValue: !Sub "${StackName}-PublicSubnet0Id"
+        - Fn::ImportValue: !Sub "${StackName}-PublicSubnet1Id"
+      Type: "application"
+    
+  FrontEndTG:
+    Type: AWS::ElasticLoadBalancingV2::TargetGroup
+    Properties: 
+      Name: !Sub "ps-scale-Frontend-TG"
+      Port: 8080
+      Protocol: "HTTP"
+      TargetType: 'instance'
+      VpcId:
+        Fn::ImportValue: !Sub "${StackName}-VPCId"
+    
+  FrontEndALBListener:
+    Type: AWS::ElasticLoadBalancingV2::Listener
+    Properties:
+      DefaultActions: 
+        - TargetGroupArn: !Ref FrontEndTG
+          Type: "forward"
+      LoadBalancerArn: !Ref FrontEndServerALB
+      Port: 80
+      Protocol: "HTTP"
+
+  # Signalling Server ALB with Multiple Target Groups
+  SignallingServerALB:
+    Type: AWS::ElasticLoadBalancingV2::LoadBalancer
+    Properties: 
+      Name: !Sub "ps-scale-Signal-ALB"
+      Scheme: "internet-facing"
+      SecurityGroups: 
+        - Fn::ImportValue: !Sub "${StackName}-SignallingALBSGId"
+      Subnets: 
+        - Fn::ImportValue: !Sub "${StackName}-PublicSubnet0Id"
+        - Fn::ImportValue: !Sub "${StackName}-PublicSubnet1Id"
+      Type: "application"
+    
+  # Signalling Target Groups (10 for scaling)
+  SignallingTG01:
+    Type: AWS::ElasticLoadBalancingV2::TargetGroup
+    Properties: 
+      Name: !Sub "ps-scale-Signal-TG-01"
+      Port: 80
+      Protocol: "HTTP"
+      TargetType: 'instance'
+      VpcId:
+        Fn::ImportValue: !Sub "${StackName}-VPCId"
+
+  SignallingTG02:
+    Type: AWS::ElasticLoadBalancingV2::TargetGroup
+    Properties: 
+      Name: !Sub "ps-scale-Signal-TG-02"
+      Port: 80
+      Protocol: "HTTP"
+      TargetType: 'instance'
+      VpcId:
+        Fn::ImportValue: !Sub "${StackName}-VPCId"
+
+  SignallingTG03:
+    Type: AWS::ElasticLoadBalancingV2::TargetGroup
+    Properties: 
+      Name: !Sub "ps-scale-Signal-TG-03"
+      Port: 80
+      Protocol: "HTTP"
+      TargetType: 'instance'
+      VpcId:
+        Fn::ImportValue: !Sub "${StackName}-VPCId"
+
+  SignallingTG04:
+    Type: AWS::ElasticLoadBalancingV2::TargetGroup
+    Properties: 
+      Name: !Sub "ps-scale-Signal-TG-04"
+      Port: 80
+      Protocol: "HTTP"
+      TargetType: 'instance'
+      VpcId:
+        Fn::ImportValue: !Sub "${StackName}-VPCId"
+
+  SignallingTG05:
+    Type: AWS::ElasticLoadBalancingV2::TargetGroup
+    Properties: 
+      Name: !Sub "ps-scale-Signal-TG-05"
+      Port: 80
+      Protocol: "HTTP"
+      TargetType: 'instance'
+      VpcId:
+        Fn::ImportValue: !Sub "${StackName}-VPCId"
+
+  SignallingTG06:
+    Type: AWS::ElasticLoadBalancingV2::TargetGroup
+    Properties: 
+      Name: !Sub "ps-scale-Signal-TG-06"
+      Port: 80
+      Protocol: "HTTP"
+      TargetType: 'instance'
+      VpcId:
+        Fn::ImportValue: !Sub "${StackName}-VPCId"
+
+  SignallingTG07:
+    Type: AWS::ElasticLoadBalancingV2::TargetGroup
+    Properties: 
+      Name: !Sub "ps-scale-Signal-TG-07"
+      Port: 80
+      Protocol: "HTTP"
+      TargetType: 'instance'
+      VpcId:
+        Fn::ImportValue: !Sub "${StackName}-VPCId"
+
+  SignallingTG08:
+    Type: AWS::ElasticLoadBalancingV2::TargetGroup
+    Properties: 
+      Name: !Sub "ps-scale-Signal-TG-08"
+      Port: 80
+      Protocol: "HTTP"
+      TargetType: 'instance'
+      VpcId:
+        Fn::ImportValue: !Sub "${StackName}-VPCId"
+
+  SignallingTG09:
+    Type: AWS::ElasticLoadBalancingV2::TargetGroup
+    Properties: 
+      Name: !Sub "ps-scale-Signal-TG-09"
+      Port: 80
+      Protocol: "HTTP"
+      TargetType: 'instance'
+      VpcId:
+        Fn::ImportValue: !Sub "${StackName}-VPCId"
+
+  SignallingTG10:
+    Type: AWS::ElasticLoadBalancingV2::TargetGroup
+    Properties: 
+      Name: !Sub "ps-scale-Signal-TG-10"
+      Port: 80
+      Protocol: "HTTP"
+      TargetType: 'instance'
+      VpcId:
+        Fn::ImportValue: !Sub "${StackName}-VPCId"
+
+  # Signalling ALB Listener and Rules
+  SignallingALBListener:
+    Type: AWS::ElasticLoadBalancingV2::Listener
+    Properties:
+      DefaultActions: 
+        - TargetGroupArn: !Ref SignallingTG01
+          Type: "forward"
+      LoadBalancerArn: !Ref SignallingServerALB
+      Port: 80
+      Protocol: "HTTP"
+
+  # Listener Rules for Session-based Routing
+  SignallingALBListenerRule02:
+    Type: AWS::ElasticLoadBalancingV2::ListenerRule
+    Properties: 
+      Actions: 
+        - TargetGroupArn: !Ref SignallingTG02
+          Type: "forward"
+      Conditions: 
+        - Field: "query-string"
+          QueryStringConfig:
+            Values: 
+              - Key: "session"
+                Value: "02"
+      ListenerArn: !Ref SignallingALBListener
+      Priority: 1
+
+  SignallingALBListenerRule03:
+    Type: AWS::ElasticLoadBalancingV2::ListenerRule
+    Properties: 
+      Actions: 
+        - TargetGroupArn: !Ref SignallingTG03
+          Type: "forward"
+      Conditions: 
+        - Field: "query-string"
+          QueryStringConfig:
+            Values: 
+              - Key: "session"
+                Value: "03"
+      ListenerArn: !Ref SignallingALBListener
+      Priority: 2
+
+  SignallingALBListenerRule04:
+    Type: AWS::ElasticLoadBalancingV2::ListenerRule
+    Properties: 
+      Actions: 
+        - TargetGroupArn: !Ref SignallingTG04
+          Type: "forward"
+      Conditions: 
+        - Field: "query-string"
+          QueryStringConfig:
+            Values: 
+              - Key: "session"
+                Value: "04"
+      ListenerArn: !Ref SignallingALBListener
+      Priority: 3
+
+  SignallingALBListenerRule05:
+    Type: AWS::ElasticLoadBalancingV2::ListenerRule
+    Properties: 
+      Actions: 
+        - TargetGroupArn: !Ref SignallingTG05
+          Type: "forward"
+      Conditions: 
+        - Field: "query-string"
+          QueryStringConfig:
+            Values: 
+              - Key: "session"
+                Value: "05"
+      ListenerArn: !Ref SignallingALBListener
+      Priority: 4
+
+  SignallingALBListenerRule06:
+    Type: AWS::ElasticLoadBalancingV2::ListenerRule
+    Properties: 
+      Actions: 
+        - TargetGroupArn: !Ref SignallingTG06
+          Type: "forward"
+      Conditions: 
+        - Field: "query-string"
+          QueryStringConfig:
+            Values: 
+              - Key: "session"
+                Value: "06"
+      ListenerArn: !Ref SignallingALBListener
+      Priority: 5
+
+  SignallingALBListenerRule07:
+    Type: AWS::ElasticLoadBalancingV2::ListenerRule
+    Properties: 
+      Actions: 
+        - TargetGroupArn: !Ref SignallingTG07
+          Type: "forward"
+      Conditions: 
+        - Field: "query-string"
+          QueryStringConfig:
+            Values: 
+              - Key: "session"
+                Value: "07"
+      ListenerArn: !Ref SignallingALBListener
+      Priority: 6
+
+  SignallingALBListenerRule08:
+    Type: AWS::ElasticLoadBalancingV2::ListenerRule
+    Properties: 
+      Actions: 
+        - TargetGroupArn: !Ref SignallingTG08
+          Type: "forward"
+      Conditions: 
+        - Field: "query-string"
+          QueryStringConfig:
+            Values: 
+              - Key: "session"
+                Value: "08"
+      ListenerArn: !Ref SignallingALBListener
+      Priority: 7
+
+  SignallingALBListenerRule09:
+    Type: AWS::ElasticLoadBalancingV2::ListenerRule
+    Properties: 
+      Actions: 
+        - TargetGroupArn: !Ref SignallingTG09
+          Type: "forward"
+      Conditions: 
+        - Field: "query-string"
+          QueryStringConfig:
+            Values: 
+              - Key: "session"
+                Value: "09"
+      ListenerArn: !Ref SignallingALBListener
+      Priority: 8
+
+  SignallingALBListenerRule10:
+    Type: AWS::ElasticLoadBalancingV2::ListenerRule
+    Properties: 
+      Actions: 
+        - TargetGroupArn: !Ref SignallingTG10
+          Type: "forward"
+      Conditions: 
+        - Field: "query-string"
+          QueryStringConfig:
+            Values: 
+              - Key: "session"
+                Value: "10"
+      ListenerArn: !Ref SignallingALBListener
+      Priority: 9
+
+Outputs:
+  MatchMakerServerALBDNSName:
+    Description: DNS name of the Matchmaker ALB
+    Value: !GetAtt MatchMakerServerALB.DNSName
+    Export:
+      Name: !Sub "${StackName}-MatchMakerALBDNS"
+
+  MatchMakerServerALBArn:
+    Description: ARN of the Matchmaker ALB
+    Value: !Ref MatchMakerServerALB
+    Export:
+      Name: !Sub "${StackName}-MatchMakerALBArn"
+
+  MatchMakerTGArn:
+    Description: ARN of the Matchmaker Target Group
+    Value: !Ref MatchMakerTG
+    Export:
+      Name: !Sub "${StackName}-MatchMakerTGArn"
+
+  FrontEndServerALBDNSName:
+    Description: DNS name of the Frontend ALB
+    Value: !GetAtt FrontEndServerALB.DNSName
+    Export:
+      Name: !Sub "${StackName}-FrontEndALBDNS"
+
+  FrontEndServerALBArn:
+    Description: ARN of the Frontend ALB
+    Value: !Ref FrontEndServerALB
+    Export:
+      Name: !Sub "${StackName}-FrontEndALBArn"
+
+  FrontEndTGArn:
+    Description: ARN of the Frontend Target Group
+    Value: !Ref FrontEndTG
+    Export:
+      Name: !Sub "${StackName}-FrontEndTGArn"
+
+  SignallingServerALBDNSName:
+    Description: DNS name of the Signalling ALB
+    Value: !GetAtt SignallingServerALB.DNSName
+    Export:
+      Name: !Sub "${StackName}-SignallingALBDNS"
+
+  SignallingServerALBArn:
+    Description: ARN of the Signalling ALB
+    Value: !Ref SignallingServerALB
+    Export:
+      Name: !Sub "${StackName}-SignallingALBArn"
+
+  SignallingServerALBName:
+    Description: Name of the Signalling ALB
+    Value: !GetAtt SignallingServerALB.LoadBalancerName
+    Export:
+      Name: !Sub "${StackName}-SignallingALBName"
+
+  # Export all signalling target group ARNs for Lambda functions
+  SignallingTG01Arn:
+    Description: ARN of Signalling Target Group 01
+    Value: !Ref SignallingTG01
+    Export:
+      Name: !Sub "${StackName}-SignallingTG01Arn"
+
+  SignallingTG02Arn:
+    Description: ARN of Signalling Target Group 02
+    Value: !Ref SignallingTG02
+    Export:
+      Name: !Sub "${StackName}-SignallingTG02Arn"
+
+  SignallingTG03Arn:
+    Description: ARN of Signalling Target Group 03
+    Value: !Ref SignallingTG03
+    Export:
+      Name: !Sub "${StackName}-SignallingTG03Arn"
+
+  SignallingTG04Arn:
+    Description: ARN of Signalling Target Group 04
+    Value: !Ref SignallingTG04
+    Export:
+      Name: !Sub "${StackName}-SignallingTG04Arn"
+
+  SignallingTG05Arn:
+    Description: ARN of Signalling Target Group 05
+    Value: !Ref SignallingTG05
+    Export:
+      Name: !Sub "${StackName}-SignallingTG05Arn"
+
+  SignallingTG06Arn:
+    Description: ARN of Signalling Target Group 06
+    Value: !Ref SignallingTG06
+    Export:
+      Name: !Sub "${StackName}-SignallingTG06Arn"
+
+  SignallingTG07Arn:
+    Description: ARN of Signalling Target Group 07
+    Value: !Ref SignallingTG07
+    Export:
+      Name: !Sub "${StackName}-SignallingTG07Arn"
+
+  SignallingTG08Arn:
+    Description: ARN of Signalling Target Group 08
+    Value: !Ref SignallingTG08
+    Export:
+      Name: !Sub "${StackName}-SignallingTG08Arn"
+
+  SignallingTG09Arn:
+    Description: ARN of Signalling Target Group 09
+    Value: !Ref SignallingTG09
+    Export:
+      Name: !Sub "${StackName}-SignallingTG09Arn"
+
+  SignallingTG10Arn:
+    Description: ARN of Signalling Target Group 10
+    Value: !Ref SignallingTG10
+    Export:
+      Name: !Sub "${StackName}-SignallingTG10Arn"

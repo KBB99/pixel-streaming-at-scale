@@ -1,0 +1,35 @@
+{
+  "deployment": {
+    "stackName": "pixel-streaming-at-scale",
+    "region": "us-east-1",
+    "keyPairName": "pixel-streaming-keypair",
+    "sslCertificateArn": "",
+    "cognitoDomain": "pixelstreaming-demo"
+  },
+  "infrastructure": {
+    "epicRepoUrl": "https://github.com/EpicGames/PixelStreamingInfrastructure.git",
+    "epicRepoBranch": "UE5.2",
+    "instanceTypes": {
+      "matchmaker": "t3.small",
+      "frontend": "t3.small",
+      "signalling": "t3.small"
+    },
+    "baseAmiId": "ami-0341d95f75f311023",
+    "buildInstanceType": "t3.medium",
+    "signallingServerAMI": "ami-0d2928245d1b2b644",
+    "matchmakerAMI": "ami-070734aa6c2df31bc",
+    "frontendAMI": "ami-0fb2dc3ec82a90c82"
+  },
+  "testUser": {
+    "username": "testuser@example.com",
+    "password": "TempPassword123!",
+    "email": "testuser@example.com"
+  },
+  "networking": {
+    "vpcCidr": "10.0.0.0/16",
+    "publicSubnet1Cidr": "10.0.0.0/24",
+    "publicSubnet2Cidr": "10.0.1.0/24",
+    "privateSubnet1Cidr": "10.0.2.0/24",
+    "privateSubnet2Cidr": "10.0.3.0/24"
+  }
+}

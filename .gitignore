@@ -1,0 +1,3 @@
+*node_modules*
+lambda-deployment/packages*
+ami-ids.json

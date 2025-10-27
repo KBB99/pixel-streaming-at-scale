@@ -1,0 +1,478 @@
+AWSTemplateFormatVersion: "2010-09-09"
+Description: "Serverless components - Lambda functions, API Gateway, and EventBridge"
+
+Parameters:
+  StackName:
+    Description: Name of the parent stack for resource naming
+    Type: String
+    Default: "pixel-streaming-at-scale"
+
+Resources:
+  # Lambda Functions
+  RegisterInstanceFunction:
+    Type: AWS::Lambda::Function
+    Properties:
+      Role:
+        Fn::ImportValue: !Sub "${StackName}-LambdaRoleArn"
+      Code: 
+        ZipFile: |
+          import boto3
+          import json
+          def lambda_handler(event, context):
+            return {
+              'statusCode': 200,
+              'body': json.dumps('This is default implementation! Please replace this!')    
+            }
+      Description: "Register Signalling instance to a target group"
+      Environment: 
+        Variables:
+          DynamoDBName: !Ref InstanceMappingTable
+      FunctionName: !Sub "${StackName}-registerInstances"
+      Handler: "index.lambda_handler"
+      Runtime: "python3.10"
+      Timeout: 900
+
+  CreateInstanceFunction:
+    Type: AWS::Lambda::Function
+    Properties:
+      Role:
+        Fn::ImportValue: !Sub "${StackName}-LambdaRoleArn"
+      Code: 
+        ZipFile: |
+          import boto3
+          import json
+          def lambda_handler(event, context):
+            return {
+              'statusCode': 200,
+              'body': json.dumps('This is default implementation! Please replace this!')    
+            }
+      Description: "Create Signalling instance on a trigger"
+      Environment: 
+        Variables:
+          DynamoDBName: !Ref InstanceMappingTable
+          LaunchTemplateName:
+            Fn::ImportValue: !Sub "${StackName}-SignallingLaunchTemplateName"
+          SubnetIdPublicA:
+            Fn::ImportValue: !Sub "${StackName}-PublicSubnet0IdForLambda"
+          SubnetIdPublicB:
+            Fn::ImportValue: !Sub "${StackName}-PublicSubnet1IdForLambda"
+      FunctionName: !Sub "${StackName}-createInstances"
+      Handler: "index.lambda_handler"
+      Runtime: "python3.10"
+      Timeout: 900
+
+  RequestSessionFunction:
+    Type: AWS::Lambda::Function
+    Properties:
+      Role:
+        Fn::ImportValue: !Sub "${StackName}-LambdaRoleArn"
+      Code: 
+        ZipFile: |
+          import boto3
+          import json
+          def lambda_handler(event, context):
+            return {
+              'statusCode': 200,
+              'body': json.dumps('This is default implementation! Please replace this!')    
+            }
+      Description: "Request a pixel streaming session"
+      Environment: 
+        Variables:
+          DynamoDBName: !Ref InstanceMappingTable
+          SQSName: !GetAtt SessionQueue.QueueName
+          clientSecret: "somethingsecret"
+      FunctionName: !Sub "${StackName}-requestSession"
+      Handler: "index.lambda_handler"
+      Runtime: "python3.10"
+      Timeout: 900
+        
+  AuthorizeClientFunction:
+    Type: AWS::Lambda::Function
+    Properties:
+      Role:
+        Fn::ImportValue: !Sub "${StackName}-LambdaRoleArn"
+      Code: 
+        ZipFile: |
+          import json
+          def lambda_handler(event, context):
+            print(event)
+            if("abcd" == event["queryStringParameters"]["tokenId"]):
+                return {
+                    'statusCode': 200,
+                    'body': json.dumps('Web socket connection valid!')
+                }
+            else:
+                return {
+                    'statusCode': 401,
+                    'body': json.dumps('Web socket connection invalid!')
+                } 
+      Description: "Authorize client"
+      FunctionName: !Sub "${StackName}-authorizeClient"
+      Handler: "index.lambda_handler"
+      Runtime: "python3.10"
+      Timeout: 900
+    
+  SendSessionDetailsFunction:
+    Type: AWS::Lambda::Function
+    Properties:
+      Role:
+        Fn::ImportValue: !Sub "${StackName}-LambdaRoleArn"
+      Code: 
+        ZipFile: |
+          import boto3
+          import json
+          def lambda_handler(event, context):
+            return {
+              'statusCode': 200,
+              'body': json.dumps('This is default implementation! Please replace this!')    
+            }
+      Description: "Send pixel streaming session details to client"
+      Environment: 
+        Variables:
+          DynamoDBName: !Ref InstanceMappingTable
+          SQSName: !GetAtt SessionQueue.QueueName
+          ApiGatewayUrl: !Sub "https://${RequestSessionAPI}.execute-api.${AWS::Region}.amazonaws.com/production"
+          MatchMakerURL: !Sub
+            - "http://${ALBDNSName}:90/signallingserver"
+            - ALBDNSName:
+                Fn::ImportValue: !Sub "${StackName}-MatchMakerALBDNS"
+      FunctionName: !Sub "${StackName}-sendSessionDetails"
+      Handler: "index.lambda_handler"
+      Runtime: "python3.10"
+      Timeout: 900
+        
+  KeepConnectionAliveFunction:
+    Type: AWS::Lambda::Function
+    Properties:
+      Role:
+        Fn::ImportValue: !Sub "${StackName}-LambdaRoleArn"
+      Code: 
+        ZipFile: |
+          import boto3
+          import json
+          def lambda_handler(event, context):
+            return {
+              'statusCode': 200,
+              'body': json.dumps('This is default implementation! Please replace this!')    
+            }
+      Description: "Send keep alive messages to client"
+      Environment: 
+        Variables:
+          ApiGatewayUrl: !Sub "https://${RequestSessionAPI}.execute-api.${AWS::Region}.amazonaws.com/production"
+      FunctionName: !Sub "${StackName}-keepConnectionAlive"
+      Handler: "index.lambda_handler"
+      Runtime: "python3.10"
+      Timeout: 900
+
+  TerminateInstanceFunction:
+    Type: AWS::Lambda::Function
+    Properties:
+      Role:
+        Fn::ImportValue: !Sub "${StackName}-LambdaRoleArn"
+      Code: 
+        ZipFile: |
+          import boto3
+          import json
+          def lambda_handler(event, context):
+            return {
+              'statusCode': 200,
+              'body': json.dumps('This is default implementation! Please replace this!')    
+            }
+      Description: "Terminate all stopped Signalling server instances"
+      Environment: 
+        Variables:
+          DynamoDBName: !Ref InstanceMappingTable
+      FunctionName: !Sub "${StackName}-terminateInstance"
+      Handler: "index.lambda_handler"
+      Runtime: "python3.10"
+      Timeout: 900
+        
+  PollerFunction:
+    Type: AWS::Lambda::Function
+    Properties:
+      Role:
+        Fn::ImportValue: !Sub "${StackName}-LambdaRoleArn"
+      Code: 
+        ZipFile: |
+          import boto3
+          import json
+          def lambda_handler(event, context):
+            return {
+              'statusCode': 200,
+              'body': json.dumps('This is default implementation! Please replace this!')    
+            }
+      Description: "Polls for incoming session request and services them"
+      Environment: 
+        Variables:
+          MatchMakerURL: !Sub
+            - "http://${ALBDNSName}:90/signallingserver"
+            - ALBDNSName:
+                Fn::ImportValue: !Sub "${StackName}-MatchMakerALBDNS"
+          SQSName: !GetAtt SessionQueue.QueueName
+      FunctionName: !Sub "${StackName}-poller"
+      Handler: "index.lambda_handler"
+      Runtime: "python3.10"
+      Timeout: 900
+        
+  UploadToDDBFunction:
+    Type: AWS::Lambda::Function
+    Properties:
+      Role:
+        Fn::ImportValue: !Sub "${StackName}-LambdaRoleArn"
+      Code: 
+        ZipFile: |
+          import boto3
+          import json
+          def lambda_handler(event, context):
+            return {
+              'statusCode': 200,
+              'body': json.dumps('This is default implementation! Please replace this!')    
+            }
+      Description: "Uploads signalling server alb query string mapping to DynamoDB"
+      Environment: 
+        Variables:
+          DynamoDBName: !Ref InstanceMappingTable
+          ALBName:
+            Fn::ImportValue: !Sub "${StackName}-SignallingALBName"
+      FunctionName: !Sub "${StackName}-uploadToDDB"
+      Handler: "index.lambda_handler"
+      Runtime: "python3.10"
+      Timeout: 30
+
+  # API Gateway WebSocket
+  RequestSessionAPI:
+    Type: 'AWS::ApiGatewayV2::Api'
+    Properties:
+      Name: !Sub "${StackName}-requestSessionAPI"
+      ProtocolType: WEBSOCKET
+      RouteSelectionExpression: $request.body.action
+      ApiKeySelectionExpression: $request.header.x-api-key 
+        
+  OnConnectIntegration:
+    Type: AWS::ApiGatewayV2::Integration
+    Properties:
+      ApiId: !Ref RequestSessionAPI
+      Description: OnConnect Integration
+      IntegrationType: AWS_PROXY
+      IntegrationUri: !Sub "arn:aws:apigateway:${AWS::Region}:lambda:path/2015-03-31/functions/${AuthorizeClientFunction.Arn}/invocations"
+            
+  OnConnectRoute:
+    Type: AWS::ApiGatewayV2::Route
+    Properties:
+      ApiId: !Ref RequestSessionAPI
+      RouteKey: $connect
+      AuthorizationType: NONE
+      OperationName: OnConnectRoute
+      RouteResponseSelectionExpression: $default
+      Target: !Sub "integrations/${OnConnectIntegration}"
+
+  ReqSessionIntegration:
+    Type: AWS::ApiGatewayV2::Integration
+    Properties:
+      ApiId: !Ref RequestSessionAPI
+      Description: reqSession Integration
+      IntegrationType: AWS_PROXY
+      IntegrationUri: !Sub "arn:aws:apigateway:${AWS::Region}:lambda:path/2015-03-31/functions/${RequestSessionFunction.Arn}/invocations"
+              
+  ReqSessionRouteDef:
+    Type: AWS::ApiGatewayV2::Route
+    Properties:
+      ApiId: !Ref RequestSessionAPI
+      RouteKey: reqSession
+      AuthorizationType: NONE
+      OperationName: reqSessionRoute
+      Target: !Sub "integrations/${ReqSessionIntegration}"
+          
+  Deployment:
+    Type: AWS::ApiGatewayV2::Deployment
+    DependsOn:
+      - ReqSessionRouteDef
+      - OnConnectRoute
+    Properties:
+      ApiId: !Ref RequestSessionAPI
+      
+  Stage:
+    Type: AWS::ApiGatewayV2::Stage
+    Properties:
+      StageName: production
+      Description: Prod Stage
+      DeploymentId: !Ref Deployment
+      ApiId: !Ref RequestSessionAPI
+
+  # Lambda Permissions
+  RequestSessionFunctionPermission:
+    Type: 'AWS::Lambda::Permission'
+    Properties:
+      Action: 'lambda:InvokeFunction'
+      Principal: apigateway.amazonaws.com
+      FunctionName: !Ref RequestSessionFunction
+      SourceArn: !Sub 'arn:aws:execute-api:${AWS::Region}:${AWS::AccountId}:${RequestSessionAPI}/*'
+        
+  AuthorizeClientPermission:
+    Type: 'AWS::Lambda::Permission'
+    Properties:
+      Action: 'lambda:InvokeFunction'
+      Principal: apigateway.amazonaws.com
+      FunctionName: !Ref AuthorizeClientFunction
+      SourceArn: !Sub 'arn:aws:execute-api:${AWS::Region}:${AWS::AccountId}:${RequestSessionAPI}/*'
+
+  # EventBridge Rules
+  PollerTriggerRule: 
+    Type: AWS::Events::Rule
+    Properties: 
+      Name: !Sub "${StackName}-PollForIncomingRequest"
+      Description: "Poll for incoming request (every 5 minutes)"
+      ScheduleExpression: "cron(0/5 * * * ? *)"
+      State: "ENABLED"
+      Targets: 
+        - Arn: !GetAtt PollerFunction.Arn
+          Id: "TargetFunctionV1"
+  
+  PermissionForPollerTriggerEventToInvokeLambda: 
+    Type: AWS::Lambda::Permission
+    Properties: 
+      FunctionName: !Ref PollerFunction
+      Action: "lambda:InvokeFunction"
+      Principal: "events.amazonaws.com"
+      SourceArn: !GetAtt PollerTriggerRule.Arn
+
+  RegisterInstanceRule:
+    Type: AWS::Events::Rule
+    Properties:
+      Description: "Register all running signalling servers"
+      EventPattern:
+        source:
+          - "aws.ec2"
+        detail-type:
+          - "EC2 Instance State-change Notification"
+        detail:
+          state:
+            - "running"
+      Name: !Sub "${StackName}-registerSignallingServer"
+      State: "ENABLED"
+      Targets:
+        - Id: "TargetFunctionV1"
+          Arn: !GetAtt RegisterInstanceFunction.Arn
+            
+  PermissionForRegisterInstanceEventsToInvokeLambda: 
+    Type: AWS::Lambda::Permission
+    Properties: 
+      FunctionName: !Ref RegisterInstanceFunction
+      Action: "lambda:InvokeFunction"
+      Principal: "events.amazonaws.com"
+      SourceArn: !GetAtt RegisterInstanceRule.Arn
+
+  TerminateInstanceRule:
+    Type: AWS::Events::Rule
+    Properties:
+      Description: "Terminate all stopped signalling servers"
+      EventPattern:
+        source:
+          - "aws.ec2"
+        detail-type:
+          - "EC2 Instance State-change Notification"
+        detail:
+          state:
+            - "stopped"
+      Name: !Sub "${StackName}-terminateSignallingServer"
+      State: "ENABLED"
+      Targets:
+        - Id: "TargetFunctionV1"
+          Arn: !GetAtt TerminateInstanceFunction.Arn
+            
+  PermissionForTerminateInstanceEventsToInvokeLambda: 
+    Type: AWS::Lambda::Permission
+    Properties: 
+      FunctionName: !Ref TerminateInstanceFunction
+      Action: "lambda:InvokeFunction"
+      Principal: "events.amazonaws.com"
+      SourceArn: !GetAtt TerminateInstanceRule.Arn
+
+  ScheduledStartRule: 
+    Type: AWS::Events::Rule
+    Properties: 
+      Name: !Sub "${StackName}-ScheduledStartSignallingServer"
+      Description: "Start Signalling Servers at 10 AM everyday"
+      ScheduleExpression: "cron(0 10 * * ? *)"
+      State: "ENABLED"
+      Targets: 
+        - Arn: !GetAtt CreateInstanceFunction.Arn
+          Id: "TargetFunctionV1"
+          Input: '{"startAllServers":false}'
+  
+  PermissionForScheduleStartEventsToInvokeLambda: 
+    Type: AWS::Lambda::Permission
+    Properties: 
+      FunctionName: !Ref CreateInstanceFunction
+      Action: "lambda:InvokeFunction"
+      Principal: "events.amazonaws.com"
+      SourceArn: !GetAtt ScheduledStartRule.Arn
+
+  ScheduledStopRule: 
+    Type: AWS::Events::Rule
+    Properties: 
+      Name: !Sub "${StackName}-ScheduledStopSignallingServer"
+      Description: "Stop Signalling Servers at 6:15 PM everyday"
+      ScheduleExpression: "cron(15 18 * * ? *)"
+      State: "ENABLED"
+      Targets: 
+        - Arn: !GetAtt TerminateInstanceFunction.Arn
+          Id: "TargetFunctionV1"
+          Input: '{"stopAllServers":true}'
+            
+  PermissionForScheduleStopEventsToInvokeLambda: 
+    Type: AWS::Lambda::Permission
+    Properties: 
+      FunctionName: !Ref TerminateInstanceFunction
+      Action: "lambda:InvokeFunction"
+      Principal: "events.amazonaws.com"
+      SourceArn: !GetAtt ScheduledStopRule.Arn
+
+  # SQS Queue
+  SessionQueue:
+    Type: AWS::SQS::Queue
+    Properties: 
+      DeduplicationScope: "queue"
+      FifoQueue: true
+      FifoThroughputLimit: "perQueue"
+      QueueName: !Sub "${StackName}-sessions.fifo"
+
+  # DynamoDB Table
+  InstanceMappingTable:
+    Type: AWS::DynamoDB::Table
+    Properties:
+      AttributeDefinitions:
+        - AttributeName: "TargetGroup"
+          AttributeType: "S"
+      KeySchema:
+        - AttributeName: "TargetGroup"
+          KeyType: "HASH"
+      ProvisionedThroughput: 
+        ReadCapacityUnits: "5"
+        WriteCapacityUnits: "5"
+      TableName: !Sub "${StackName}-instanceMapping"
+
+Outputs:
+  RequestSessionAPIId:
+    Description: API Gateway WebSocket API ID
+    Value: !Ref RequestSessionAPI
+    Export:
+      Name: !Sub "${StackName}-RequestSessionAPIId"
+
+  APIGatewayWSAPI:
+    Description: "Web socket endpoint for api server"
+    Value: !Sub "wss://${RequestSessionAPI}.execute-api.${AWS::Region}.amazonaws.com/production?tokenId=abcd"
+    Export:
+      Name: !Sub "${StackName}-APIGatewayWSAPI"
+
+  InstanceMappingTableName:
+    Description: DynamoDB table name for instance mapping
+    Value: !Ref InstanceMappingTable
+    Export:
+      Name: !Sub "${StackName}-InstanceMappingTableName"
+
+  SessionQueueName:
+    Description: SQS Queue name for session requests
+    Value: !GetAtt SessionQueue.QueueName
+    Export:
+      Name: !Sub "${StackName}-SessionQueueName"

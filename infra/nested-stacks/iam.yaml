@@ -1,0 +1,318 @@
+AWSTemplateFormatVersion: "2010-09-09"
+Description: "IAM roles and policies for Pixel Streaming infrastructure"
+
+Parameters:
+  StackName:
+    Description: Name of the parent stack for resource naming
+    Type: String
+    Default: "pixel-streaming-at-scale"
+
+Resources:
+  # EC2 IAM Role for instances
+  EC2IAMRole:
+    Type: AWS::IAM::Role
+    Properties: 
+      AssumeRolePolicyDocument:
+        Version: "2012-10-17"
+        Statement:
+          - Effect: Allow
+            Principal:
+              Service:
+                - ec2.amazonaws.com
+            Action:
+              - 'sts:AssumeRole'
+      Description: "Role for EC2 servers"
+      ManagedPolicyArns:
+        - 'arn:aws:iam::aws:policy/AmazonSSMFullAccess'
+      Policies: 
+        - PolicyName: accessDynamoDB
+          PolicyDocument:
+            Version: "2012-10-17"
+            Statement:
+              - Sid: VisualEditor0
+                Effect: Allow
+                Action:
+                  - "dynamodb:Scan"
+                  - "dynamodb:Query"
+                  - "dynamodb:GetRecords"
+                Resource: 
+                  - !Sub 'arn:aws:dynamodb:*:${AWS::AccountId}:table/*/index/*'
+                  - !Sub 'arn:aws:dynamodb:*:${AWS::AccountId}:table/*/stream/*'
+              - Sid: VisualEditor1
+                Effect: Allow
+                Action:
+                  - "dynamodb:DescribeTable"
+                  - "dynamodb:GetItem"
+                  - "dynamodb:Scan"
+                  - "dynamodb:Query"
+                Resource: !Sub 'arn:aws:dynamodb:*:${AWS::AccountId}:table/*'
+        - PolicyName: accessParameterStore
+          PolicyDocument:
+            Version: "2012-10-17"
+            Statement:
+              - Sid: VisualEditor0
+                Effect: Allow
+                Action:
+                  - "ssm:GetParameterHistory"
+                  - "ssm:GetParametersByPath"
+                  - "ssm:GetParameters"
+                  - "ssm:GetParameter"
+                Resource: 
+                  - 'arn:aws:s3:::*'
+                  - !Sub 'arn:aws:ssm:*:${AWS::AccountId}:parameter/*'
+              - Sid: VisualEditor1
+                Effect: Allow
+                Action:
+                  - "ssm:DescribeParameters"
+                Resource: '*'
+        - PolicyName: pullFromCodeCommit
+          PolicyDocument:
+            Version: "2012-10-17"
+            Statement:
+              - Effect: Allow
+                Action:
+                  - "codecommit:TagResource"
+                  - "codecommit:GetTree"
+                  - "codecommit:GetBlob"
+                  - "codecommit:GetReferences"
+                  - "codecommit:ListRepositories"
+                  - "codecommit:GetPullRequestApprovalStates"
+                  - "codecommit:DescribeMergeConflicts"
+                  - "codecommit:BatchDescribeMergeConflicts"
+                  - "codecommit:GetCommentsForComparedCommit"
+                  - "codecommit:GetCommentReactions"
+                  - "codecommit:GetCommit"
+                  - "codecommit:GetComment"
+                  - "codecommit:GetCommitHistory"
+                  - "codecommit:GetCommitsFromMergeBase"
+                  - "codecommit:GetApprovalRuleTemplate"
+                  - "codecommit:BatchGetCommits"
+                  - "codecommit:DescribePullRequestEvents"
+                  - "codecommit:GetPullRequest"
+                  - "codecommit:ListBranches"
+                  - "codecommit:GetPullRequestOverrideState"
+                  - "codecommit:GetRepositoryTriggers"
+                  - "codecommit:GitPull"
+                  - "codecommit:BatchGetRepositories"
+                  - "codecommit:GetCommentsForPullRequest"
+                  - "codecommit:UntagResource"
+                  - "codecommit:GetObjectIdentifier"
+                  - "codecommit:CancelUploadArchive"
+                  - "codecommit:GetFolder"
+                  - "codecommit:BatchGetPullRequests"
+                  - "codecommit:GetFile"
+                  - "codecommit:GetUploadArchiveStatus"
+                  - "codecommit:EvaluatePullRequestApprovalRules"
+                  - "codecommit:GetDifferences"
+                  - "codecommit:GetRepository"
+                  - "codecommit:GetBranch"
+                  - "codecommit:GetMergeConflicts"
+                  - "codecommit:GetMergeCommit"
+                  - "codecommit:GetMergeOptions"
+                Resource: !Sub 'arn:aws:codecommit:*:${AWS::AccountId}:*'
+        - PolicyName: registerInstancesToTG
+          PolicyDocument:
+            Version: "2012-10-17"
+            Statement:
+              - Effect: Allow
+                Action:
+                  - "elasticloadbalancing:RegisterTargets"
+                Resource: !Sub 'arn:aws:elasticloadbalancing:*:${AWS::AccountId}:targetgroup/*/*'
+      RoleName: !Sub "${StackName}-EC2Role"
+
+  # Instance Profile for EC2
+  Ec2InstanceProfile:
+    Type: AWS::IAM::InstanceProfile
+    Properties: 
+      InstanceProfileName: !Sub "${StackName}-instanceProfile"
+      Roles: 
+        - !Ref EC2IAMRole
+
+  # Lambda IAM Role
+  LambdaIAMRole:
+    Type: AWS::IAM::Role
+    Properties: 
+      AssumeRolePolicyDocument:
+        Version: "2012-10-17"
+        Statement:
+          - Effect: Allow
+            Principal:
+              Service:
+                - lambda.amazonaws.com
+            Action:
+              - 'sts:AssumeRole'
+      Description: "Role for lambda functions"
+      ManagedPolicyArns:
+        - 'arn:aws:iam::aws:policy/service-role/AWSLambdaBasicExecutionRole'
+      Policies: 
+        - PolicyName: invokeLambda
+          PolicyDocument:
+            Version: "2012-10-17"
+            Statement:
+              - Effect: Allow
+                Action:
+                  - "lambda:InvokeFunctionUrl"
+                  - "lambda:InvokeFunction"
+                  - "lambda:GetFunction"
+                  - "lambda:InvokeAsync"
+                Resource: !Sub 'arn:aws:lambda:*:${AWS::AccountId}:function:*'
+        - PolicyName: dynamoDBPrivileges
+          PolicyDocument:
+            Version: "2012-10-17"
+            Statement:
+              - Sid: VisualEditor0
+                Effect: Allow
+                Action:
+                  - "dynamodb:Scan"
+                  - "dynamodb:Query"
+                  - "dynamodb:GetRecords"
+                Resource: 
+                  - !Sub 'arn:aws:dynamodb:*:${AWS::AccountId}:table/*/index/*'
+                  - !Sub 'arn:aws:dynamodb:*:${AWS::AccountId}:table/*/stream/*'
+              - Sid: VisualEditor1
+                Effect: Allow
+                Action:
+                  - "dynamodb:BatchGetItem"
+                  - "dynamodb:ConditionCheckItem"
+                  - "dynamodb:PutItem"
+                  - "dynamodb:DescribeTable"
+                  - "dynamodb:GetItem"
+                  - "dynamodb:Scan"
+                  - "dynamodb:Query"
+                  - "dynamodb:UpdateItem"
+                Resource: !Sub 'arn:aws:dynamodb:*:${AWS::AccountId}:table/*'     
+              - Sid: VisualEditor2
+                Effect: Allow
+                Action:
+                  - "dynamodb:ListTables"
+                Resource: '*'          
+        - PolicyName: terminateEC2Instance
+          PolicyDocument:
+            Version: "2012-10-17"
+            Statement:
+              - Effect: Allow
+                Action:
+                  - "ec2:TerminateInstances"
+                Resource: !Sub 'arn:aws:ec2:*:${AWS::AccountId}:instance/*'
+        - PolicyName: registerInstancesToTG
+          PolicyDocument:
+            Version: "2012-10-17"
+            Statement:
+              - Effect: Allow
+                Action:
+                  - "elasticloadbalancing:RegisterTargets"
+                Resource: !Sub 'arn:aws:elasticloadbalancing:*:${AWS::AccountId}:targetgroup/*/*'
+        - PolicyName: getSSMParameter
+          PolicyDocument:
+            Version: "2012-10-17"
+            Statement:
+              - Effect: Allow
+                Action:
+                  - "ssm:GetParametersByPath"
+                  - "ssm:GetParameters"
+                  - "ssm:GetParameter"
+                Resource: 
+                  - 'arn:aws:s3:::*'
+                  - !Sub 'arn:aws:ssm:*:${AWS::AccountId}:parameter/*'
+        - PolicyName: describeLoadBalancer
+          PolicyDocument:
+            Version: "2012-10-17"
+            Statement:
+              - Effect: Allow
+                Action:
+                  - "elasticloadbalancing:DescribeLoadBalancerAttributes"
+                  - "elasticloadbalancing:DescribeLoadBalancers"
+                  - "elasticloadbalancing:DescribeListeners"
+                  - "elasticloadbalancing:DescribeTargetGroups"
+                  - "elasticloadbalancing:DescribeRules"
+                Resource: '*'
+        - PolicyName: ec2Management
+          PolicyDocument:
+            Version: "2012-10-17"
+            Statement:
+              - Sid: VisualEditor0
+                Effect: Allow
+                Action:
+                  - "iam:PassRole"
+                Resource: !GetAtt EC2IAMRole.Arn
+              - Sid: VisualEditor1
+                Effect: Allow
+                Action:
+                  - "ec2:DescribeInstances"
+                  - "cloudwatch:PutMetricData"
+                  - "ec2:DeleteTags"
+                  - "ec2:CreateTags"
+                  - "ec2:DescribeInstanceAttribute"
+                  - "ec2:RunInstances"
+                  - "ec2:StopInstances"
+                  - "elasticloadbalancing:CreateLoadBalancerListeners"
+                  - "elasticloadbalancing:DescribeLoadBalancerAttributes"
+                  - "elasticloadbalancing:DeleteLoadBalancerPolicy"
+                  - "elasticloadbalancing:DescribeLoadBalancers"
+                  - "ec2:StartInstances"
+                  - "elasticloadbalancing:DescribeLoadBalancerPolicies"
+                  - "elasticloadbalancing:DeleteLoadBalancerListeners"
+                  - "elasticloadbalancing:CreateLoadBalancerPolicy"
+                  - "ec2:DescribeInstanceStatus"
+                Resource: '*'
+              - Sid: VisualEditor2
+                Effect: Allow
+                Action:
+                  - "logs:DeleteLogGroup"
+                  - "logs:CreateLogGroup"
+                  - "logs:PutLogEvents"
+                  - "elasticloadbalancing:CreateLoadBalancerListeners"
+                  - "elasticloadbalancing:DeleteLoadBalancerPolicy"
+                  - "elasticloadbalancing:DeleteLoadBalancerListeners"
+                  - "elasticloadbalancing:CreateLoadBalancerPolicy"
+                  - "sqs:DeleteMessage"
+                  - "sqs:GetQueueUrl"
+                  - "sqs:ChangeMessageVisibility"
+                  - "sqs:SendMessage"
+                  - "sqs:ReceiveMessage"
+                  - "execute-api:*"
+                Resource:
+                  - !Sub 'arn:aws:sqs:*:${AWS::AccountId}:*'
+                  - !Sub 'arn:aws:execute-api:*:${AWS::AccountId}:*/*/*/*'
+                  - !Sub 'arn:aws:elasticloadbalancing:*:${AWS::AccountId}:loadbalancer/*'
+                  - !Sub 'arn:aws:logs:*:${AWS::AccountId}:log-group:*:log-stream:*'
+              - Sid: VisualEditor3
+                Effect: Allow
+                Action:
+                  - "logs:CreateLogStream"
+                  - "logs:DeleteLogStream"
+                Resource: !Sub 'arn:aws:logs:*:${AWS::AccountId}:log-group:*'
+              - Sid: VisualEditor4
+                Effect: Allow
+                Action:
+                  - "elasticloadbalancing:DeleteLoadBalancerPolicy"
+                  - "elasticloadbalancing:DeleteLoadBalancerListeners"
+                  - "elasticloadbalancing:CreateLoadBalancerPolicy"
+                  - "elasticloadbalancing:CreateLoadBalancerListeners"
+                Resource: !Sub 'arn:aws:elasticloadbalancing:*:${AWS::AccountId}:loadbalancer/*'
+      RoleName: !Sub "${StackName}-LambdaRole"
+
+Outputs:
+  EC2RoleArn:
+    Description: ARN of the EC2 IAM Role
+    Value: !GetAtt EC2IAMRole.Arn
+    Export:
+      Name: !Sub "${StackName}-EC2RoleArn"
+      
+  EC2InstanceProfileArn:
+    Description: ARN of the EC2 Instance Profile
+    Value: !GetAtt Ec2InstanceProfile.Arn
+    Export:
+      Name: !Sub "${StackName}-EC2InstanceProfileArn"
+      
+  EC2InstanceProfileName:
+    Description: Name of the EC2 Instance Profile
+    Value: !Ref Ec2InstanceProfile
+    Export:
+      Name: !Sub "${StackName}-EC2InstanceProfileName"
+      
+  LambdaRoleArn:
+    Description: ARN of the Lambda IAM Role
+    Value: !GetAtt LambdaIAMRole.Arn
+    Export:
+      Name: !Sub "${StackName}-LambdaRoleArn"

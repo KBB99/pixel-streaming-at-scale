@@ -1,0 +1,140 @@
+AWSTemplateFormatVersion: "2010-09-09"
+Description: "Services - CloudFront, Cognito, and SSM parameters"
+
+Parameters:
+  StackName:
+    Description: Name of the parent stack for resource naming
+    Type: String
+    Default: "pixel-streaming-at-scale"
+
+Resources:
+  # CloudFront Distribution
+  CloudFrontDistribution:
+    Type: 'AWS::CloudFront::Distribution'
+    Properties:
+      DistributionConfig:
+        Comment: !Sub "${StackName} Cloudfront Distribution pointing ALB Origin"
+        Origins:
+          - DomainName:
+              Fn::ImportValue: !Sub "${StackName}-FrontEndALBDNS"
+            Id: 'alb'
+            CustomOriginConfig:
+              HTTPPort: '80'
+              HTTPSPort: '443'
+              OriginProtocolPolicy: 'http-only'
+        Enabled: true
+        HttpVersion: 'http2'
+        DefaultCacheBehavior:
+          CachePolicyId: '4135ea2d-6df8-44a3-9df3-4b5a84be39ad'
+          AllowedMethods:
+            - GET
+            - HEAD
+            - DELETE
+            - OPTIONS
+            - PATCH
+            - POST
+            - PUT
+          Compress: true
+          TargetOriginId: 'alb'
+          ViewerProtocolPolicy: 'https-only'
+        PriceClass: 'PriceClass_200'
+        IPV6Enabled: false
+
+  # Cognito User Pool
+  CognitoUserPool:
+    Type: AWS::Cognito::UserPool
+    Properties:
+      AccountRecoverySetting:
+        RecoveryMechanisms:
+          - Name: verified_email
+            Priority: 1
+      UsernameAttributes:
+        - email
+      AutoVerifiedAttributes:
+        - email
+      UserPoolName: !Sub "${StackName}-authentication-pool"
+      Schema:
+        - Name: email
+          AttributeDataType: String
+          Mutable: false
+          Required: true
+          
+  CognitoUserPoolClient:
+    Type: AWS::Cognito::UserPoolClient
+    Properties:
+      UserPoolId: !Ref CognitoUserPool
+      AllowedOAuthFlowsUserPoolClient: true
+      GenerateSecret: true
+      CallbackURLs:
+        - !Sub "https://${CloudFrontDistribution.DomainName}"
+      AllowedOAuthFlows:
+        - code
+      AllowedOAuthScopes:
+        - email
+        - openid
+        - aws.cognito.signin.user.admin
+      SupportedIdentityProviders:
+        - COGNITO
+        
+  CognitoUserPoolDomain:
+    Type: AWS::Cognito::UserPoolDomain
+    Properties:
+      Domain: !Sub "${StackName}-auth-${AWS::AccountId}"
+      UserPoolId: !Ref CognitoUserPool
+
+  # SSM Parameters
+  ConcurrencyParameter:
+    Type: AWS::SSM::Parameter
+    Properties:
+      Name: !Sub "/${StackName}/concurrencyLimit"
+      Type: "String"
+      Value: "10"
+      Description: "Maximum number of Signalling instances running in parallel"
+        
+  MatchMakerServerSecret:
+    Type: AWS::SSM::Parameter
+    Properties:
+      Name: !Sub "/${StackName}/matchmakerclientsecret"
+      Type: "String"
+      Value: "somesecretstring"
+      Description: "client secret for validation by Matchmaker"
+
+Outputs:
+  CloudFrontDistributionId:
+    Description: CloudFront Distribution ID
+    Value: !Ref CloudFrontDistribution
+    Export:
+      Name: !Sub "${StackName}-CloudFrontDistributionId"
+
+  CloudFrontDistributionDomainName:
+    Description: CloudFront Distribution Domain Name
+    Value: !GetAtt CloudFrontDistribution.DomainName
+    Export:
+      Name: !Sub "${StackName}-CloudFrontDomainName"
+
+  CognitoCallBackURL:
+    Description: "Callback URL for Cognito"
+    Value: !Sub "https://${CloudFrontDistribution.DomainName}"
+    Export:
+      Name: !Sub "${StackName}-CognitoCallBackURL"
+      
+  CognitoClientID:
+    Description: "Client ID for Cognito"
+    Value: !Ref CognitoUserPoolClient
+    Export:
+      Name: !Sub "${StackName}-CognitoClientID"
+      
+  CognitoDomainURL:
+    Description: "Domain URL for Cognito"
+    Value: !Sub "https://${StackName}-auth-${AWS::AccountId}.auth.${AWS::Region}.amazoncognito.com"
+    Export:
+      Name: !Sub "${StackName}-CognitoDomainURL"
+      
+  SignallingServerWSAPI:
+    Description: "Web socket endpoint for signalling server"
+    Value: !Sub
+      - "wss://${ALBDNSName}?"
+      - ALBDNSName:
+          Fn::ImportValue: !Sub "${StackName}-SignallingALBDNS"
+    Export:
+      Name: !Sub "${StackName}-SignallingServerWSAPI"

@@ -1,0 +1,161 @@
+AWSTemplateFormatVersion: "2010-09-09"
+Description: "Compute resources - Launch templates and EC2 instances"
+
+Parameters:
+  StackName:
+    Description: Name of the parent stack for resource naming
+    Type: String
+    Default: "pixel-streaming-at-scale"
+    
+  MatchmakerAMI:
+    Description: The AMI for Matchmaker server
+    Type: String
+    Default: "ami-070734aa6c2df31bc"
+    
+  MatchmakerInstanceType:
+    Description: The instance type for Matchmaker server
+    Type: String
+    Default: "t3.small"
+    
+  FrontEndAMI:
+    Description: The AMI for Frontend server
+    Type: String
+    Default: "ami-0fb2dc3ec82a90c82"
+    
+  SignallingServerAMI:
+    Description: The AMI for Signalling server
+    Type: String
+    Default: "ami-0d2928245d1b2b644"
+    
+  FrontEndInstanceType:
+    Description: The instance type for Frontend server
+    Type: String
+    Default: "t3.small"
+    
+  SignallingInstanceType:
+    Description: The instance type for Signalling server
+    Type: String
+    Default: "t3.small"
+
+Resources:
+  # Launch Templates
+  MatchmakerLaunchTemplate:
+    Type: AWS::EC2::LaunchTemplate
+    Properties: 
+      LaunchTemplateData: 
+        ImageId: !Ref MatchmakerAMI
+        TagSpecifications:
+          - ResourceType: 'instance'
+            Tags:
+              - Key: 'Name'
+                Value: !Sub "${StackName}-Matchmaker"
+              - Key: 'type'
+                Value: 'matchmaker'
+              - Key: 'StackName'
+                Value: !Ref StackName
+        InstanceType: !Ref MatchmakerInstanceType
+        SecurityGroupIds:
+          - Fn::ImportValue: !Sub "${StackName}-MatchmakerInstanceSGId"
+        IamInstanceProfile:
+          Arn:
+            Fn::ImportValue: !Sub "${StackName}-EC2InstanceProfileArn"
+      LaunchTemplateName: !Sub "ps-scale-Matchmaker-LT"
+        
+  FrontEndLaunchTemplate:
+    Type: AWS::EC2::LaunchTemplate
+    Properties: 
+      LaunchTemplateData: 
+        ImageId: !Ref FrontEndAMI
+        TagSpecifications:
+          - ResourceType: 'instance'
+            Tags:
+              - Key: 'Name'
+                Value: !Sub "${StackName}-Frontend"
+              - Key: 'type'
+                Value: 'frontend'
+              - Key: 'StackName'
+                Value: !Ref StackName
+        InstanceType: !Ref FrontEndInstanceType
+        SecurityGroupIds:
+          - Fn::ImportValue: !Sub "${StackName}-FrontendInstanceSGId"
+        IamInstanceProfile:
+          Arn:
+            Fn::ImportValue: !Sub "${StackName}-EC2InstanceProfileArn"
+      LaunchTemplateName: !Sub "ps-scale-Frontend-LT"
+        
+  SignallingLaunchTemplate:
+    Type: AWS::EC2::LaunchTemplate
+    Properties: 
+      LaunchTemplateData: 
+        ImageId: !Ref SignallingServerAMI
+        InstanceType: !Ref SignallingInstanceType
+        IamInstanceProfile:
+          Arn:
+            Fn::ImportValue: !Sub "${StackName}-EC2InstanceProfileArn"
+        TagSpecifications:
+          - ResourceType: 'instance'
+            Tags:
+              - Key: 'Name'
+                Value: !Sub "${StackName}-Signalling"
+              - Key: 'type'
+                Value: 'signalling'
+              - Key: 'StackName'
+                Value: !Ref StackName
+        SecurityGroupIds:
+          - Fn::ImportValue: !Sub "${StackName}-SignallingInstanceSGId"
+      LaunchTemplateName: !Sub "ps-scale-Signalling-LT"
+
+  # NOTE: Static EC2 instances (Matchmaker, Frontend) are created by deploy-all.sh script
+  # NOT by CloudFormation - this avoids dependency chain issues and follows intended workflow
+  # 
+  # SignallingWebServer instances are created DYNAMICALLY by Lambda functions
+  # The Launch Templates above are used by:
+  # - deploy-all.sh script (for static instances) 
+  # - Lambda functions (for dynamic SignallingWebServer instances)
+
+  # Target Group Attachments are handled by Lambda functions dynamically
+  # Static attachments removed as AWS::ElasticLoadBalancingV2::TargetGroupBinding 
+  # is not a valid CloudFormation resource type
+
+Outputs:
+  MatchmakerLaunchTemplateId:
+    Description: ID of the Matchmaker Launch Template
+    Value: !Ref MatchmakerLaunchTemplate
+    Export:
+      Name: !Sub "${StackName}-MatchmakerLaunchTemplateId"
+
+  FrontEndLaunchTemplateId:
+    Description: ID of the Frontend Launch Template
+    Value: !Ref FrontEndLaunchTemplate
+    Export:
+      Name: !Sub "${StackName}-FrontEndLaunchTemplateId"
+
+  SignallingLaunchTemplateId:
+    Description: ID of the Signalling Launch Template
+    Value: !Ref SignallingLaunchTemplate
+    Export:
+      Name: !Sub "${StackName}-SignallingLaunchTemplateId"
+
+  SignallingLaunchTemplateName:
+    Description: Name of the Signalling Launch Template
+    Value: !Sub "${StackName}-SignallingLaunchTemplate"
+    Export:
+      Name: !Sub "${StackName}-SignallingLaunchTemplateName"
+
+  # NOTE: MatchMaking and Frontend instance IDs are not exported by CloudFormation
+  # These instances are created by deploy-all.sh script, not CloudFormation
+  # Instance registration with Target Groups is handled by the deployment scripts
+
+  PublicSubnet0Id:
+    Description: Public Subnet 0 ID for Lambda environment variables
+    Value:
+      Fn::ImportValue: !Sub "${StackName}-PublicSubnet0Id"
+    Export:
+      Name: !Sub "${StackName}-PublicSubnet0IdForLambda"
+
+  PublicSubnet1Id:
+    Description: Public Subnet 1 ID for Lambda environment variables
+    Value:
+      Fn::ImportValue: !Sub "${StackName}-PublicSubnet1Id"
+    Export:
+      Name: !Sub "${StackName}-PublicSubnet1IdForLambda"

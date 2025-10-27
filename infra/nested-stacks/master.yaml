@@ -1,0 +1,251 @@
+AWSTemplateFormatVersion: "2010-09-09"
+Description: "Master stack for Pixel Streaming at Scale - orchestrates all nested stacks"
+
+Parameters:
+  # Infrastructure Parameters
+  VPCName:
+    Description: The name of the VPC being created
+    Type: String
+    Default: "metaverse"
+    
+  VPCCIDR:
+    Description: The CIDR of the VPC being created
+    Type: String
+    Default: "10.0.0.0/16"
+    
+  Public0CIDR:
+    Description: The CIDR of the first public subnet being created
+    Type: String
+    Default: "10.0.0.0/24"
+    
+  Public1CIDR:
+    Description: The CIDR of the second public subnet being created
+    Type: String
+    Default: "10.0.1.0/24"
+    
+  Private0CIDR:
+    Description: The CIDR of the first private subnet being created
+    Type: String
+    Default: "10.0.2.0/24"
+    
+  Private1CIDR:
+    Description: The CIDR of the second private subnet being created
+    Type: String
+    Default: "10.0.3.0/24"
+
+  # AMI Parameters
+  MatchmakerAMI:
+    Description: The AMI for Matchmaker server
+    Type: String
+    Default: "ami-0c284ed6bd6a72b4a"
+    
+  FrontEndAMI:
+    Description: The AMI for Frontend server
+    Type: String
+    Default: "ami-05422fc3670401f9a"
+    
+  SignallingServerAMI:
+    Description: The AMI for Signalling server
+    Type: String
+    Default: "ami-014fefbaf7bdafab3"
+
+  # Instance Type Parameters
+  MatchmakerInstanceType:
+    Description: The instance type for Matchmaker server
+    Type: String
+    Default: "t2.micro"
+    
+  FrontEndInstanceType:
+    Description: The instance type for Frontend server
+    Type: String
+    Default: "t2.micro"
+    
+  SignallingInstanceType:
+    Description: The instance type for Signalling server
+    Type: String
+    Default: "t2.micro"
+
+  # Deployment Configuration
+  StackName:
+    Description: Name prefix for all resources
+    Type: String
+    Default: "pixel-streaming-at-scale"
+
+  NestedStacksS3Bucket:
+    Description: S3 bucket name (not URL) containing nested stack templates
+    Type: String
+    Default: ""
+
+  NestedStacksS3KeyPrefix:
+    Description: S3 key prefix for nested stack templates
+    Type: String
+    Default: "nested-stacks/"
+
+Resources:
+  # IAM Stack (Foundation - deploy first)
+  IAMStack:
+    Type: AWS::CloudFormation::Stack
+    Properties:
+      TemplateURL: !Sub "https://s3.amazonaws.com/${NestedStacksS3Bucket}/${NestedStacksS3KeyPrefix}iam.yaml"
+      Parameters:
+        StackName: !Ref StackName
+      Tags:
+        - Key: "StackName"
+          Value: !Ref StackName
+        - Key: "Component"
+          Value: "IAM"
+
+  # Core Infrastructure Stack (VPC, Subnets, Security Groups)
+  CoreInfrastructureStack:
+    Type: AWS::CloudFormation::Stack
+    DependsOn: IAMStack
+    Properties:
+      TemplateURL: !Sub "https://s3.amazonaws.com/${NestedStacksS3Bucket}/${NestedStacksS3KeyPrefix}core-infrastructure.yaml"
+      Parameters:
+        StackName: !Ref StackName
+        VPCName: !Ref VPCName
+        VPCCIDR: !Ref VPCCIDR
+        Public0CIDR: !Ref Public0CIDR
+        Public1CIDR: !Ref Public1CIDR
+        Private0CIDR: !Ref Private0CIDR
+        Private1CIDR: !Ref Private1CIDR
+      Tags:
+        - Key: "StackName"
+          Value: !Ref StackName
+        - Key: "Component"
+          Value: "CoreInfrastructure"
+
+  # Load Balancers Stack (ALBs, Target Groups, Listeners)
+  LoadBalancersStack:
+    Type: AWS::CloudFormation::Stack
+    DependsOn: CoreInfrastructureStack
+    Properties:
+      TemplateURL: !Sub "https://s3.amazonaws.com/${NestedStacksS3Bucket}/${NestedStacksS3KeyPrefix}load-balancers.yaml"
+      Parameters:
+        StackName: !Ref StackName
+      Tags:
+        - Key: "StackName"
+          Value: !Ref StackName
+        - Key: "Component"
+          Value: "LoadBalancers"
+
+  # Compute Stack (Launch Templates with User Data - No Custom AMIs Required)
+  ComputeStack:
+    Type: AWS::CloudFormation::Stack
+    DependsOn: 
+      - IAMStack
+      - CoreInfrastructureStack
+      - LoadBalancersStack
+    Properties:
+      TemplateURL: !Sub "https://s3.amazonaws.com/${NestedStacksS3Bucket}/${NestedStacksS3KeyPrefix}compute-with-userdata.yaml"
+      Parameters:
+        StackName: !Ref StackName
+        MatchmakerInstanceType: !Ref MatchmakerInstanceType
+        FrontEndInstanceType: !Ref FrontEndInstanceType
+        SignallingInstanceType: !Ref SignallingInstanceType
+      Tags:
+        - Key: "StackName"
+          Value: !Ref StackName
+        - Key: "Component"
+          Value: "Compute"
+
+  # Serverless Stack (Lambda, API Gateway, EventBridge)
+  ServerlessStack:
+    Type: AWS::CloudFormation::Stack
+    DependsOn: 
+      - IAMStack
+      - LoadBalancersStack
+      - ComputeStack
+    Properties:
+      TemplateURL: !Sub "https://s3.amazonaws.com/${NestedStacksS3Bucket}/${NestedStacksS3KeyPrefix}serverless.yaml"
+      Parameters:
+        StackName: !Ref StackName
+      Tags:
+        - Key: "StackName"
+          Value: !Ref StackName
+        - Key: "Component"
+          Value: "Serverless"
+
+  # Services Stack (CloudFront, Cognito, SSM)
+  ServicesStack:
+    Type: AWS::CloudFormation::Stack
+    DependsOn: 
+      - LoadBalancersStack
+      - ServerlessStack
+    Properties:
+      TemplateURL: !Sub "https://s3.amazonaws.com/${NestedStacksS3Bucket}/${NestedStacksS3KeyPrefix}services.yaml"
+      Parameters:
+        StackName: !Ref StackName
+      Tags:
+        - Key: "StackName"
+          Value: !Ref StackName
+        - Key: "Component"
+          Value: "Services"
+
+Outputs:
+  # Core Infrastructure Outputs
+  VPCId:
+    Description: "VPC ID"
+    Value: !GetAtt CoreInfrastructureStack.Outputs.VPCId
+    
+  # Load Balancer Outputs
+  MatchMakerALBDNS:
+    Description: "DNS name of the Matchmaker ALB"
+    Value: !GetAtt LoadBalancersStack.Outputs.MatchMakerServerALBDNSName
+    
+  FrontEndALBDNS:
+    Description: "DNS name of the Frontend ALB" 
+    Value: !GetAtt LoadBalancersStack.Outputs.FrontEndServerALBDNSName
+    
+  SignallingALBDNS:
+    Description: "DNS name of the Signalling ALB"
+    Value: !GetAtt LoadBalancersStack.Outputs.SignallingServerALBDNSName
+
+  # Compute Outputs
+  # Note: Static EC2 instances are created by deploy-all.sh script, not CloudFormation
+  # Instance IDs are not available as CloudFormation outputs
+  
+  # Serverless Outputs
+  APIGatewayWSAPI:
+    Description: "WebSocket endpoint for API server"
+    Value: !GetAtt ServerlessStack.Outputs.APIGatewayWSAPI
+
+  # Services Outputs
+  CloudFrontDomainName:
+    Description: "CloudFront Distribution Domain Name"
+    Value: !GetAtt ServicesStack.Outputs.CloudFrontDistributionDomainName
+    
+  CognitoCallBackURL:
+    Description: "Callback URL for Cognito"
+    Value: !GetAtt ServicesStack.Outputs.CognitoCallBackURL
+      
+  CognitoClientID:
+    Description: "Client ID for Cognito"
+    Value: !GetAtt ServicesStack.Outputs.CognitoClientID
+      
+  CognitoDomainURL:
+    Description: "Domain URL for Cognito"
+    Value: !GetAtt ServicesStack.Outputs.CognitoDomainURL
+      
+  SignallingServerWSAPI:
+    Description: "WebSocket endpoint for signalling server"
+    Value: !GetAtt ServicesStack.Outputs.SignallingServerWSAPI
+
+  # Summary Output
+  DeploymentSummary:
+    Description: "Deployment Summary"
+    Value: !Sub |
+      🚀 Pixel Streaming at Scale Deployment Complete!
+      
+      📊 Frontend: https://${ServicesStack.Outputs.CloudFrontDistributionDomainName}
+      🎮 API Gateway: ${ServerlessStack.Outputs.APIGatewayWSAPI}
+      🔗 Signalling: ${ServicesStack.Outputs.SignallingServerWSAPI}
+      🔐 Cognito: ${ServicesStack.Outputs.CognitoDomainURL}
+      
+      Stack Components:
+      ✅ IAM: ${IAMStack}
+      ✅ Infrastructure: ${CoreInfrastructureStack} 
+      ✅ Load Balancers: ${LoadBalancersStack}
+      ✅ Compute: ${ComputeStack}
+      ✅ Serverless: ${ServerlessStack}
+      ✅ Services: ${ServicesStack}
